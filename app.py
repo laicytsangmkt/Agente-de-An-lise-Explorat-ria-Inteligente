@@ -8,7 +8,7 @@ import json
 import base64
 from datetime import datetime
 
-# --- PREFIXO DO AGENTE COM INSTRUÇÕES DE MEMÓRIA ---
+# --- PREFIXO DO AGENTE ---
 PREFIXO_AGENTE_MELHORADO = """
 Você é um agente de análise de dados especialista em Python e Pandas, projetado para ser extremamente metódico e claro.
 
@@ -18,14 +18,6 @@ REGRAS DE OURO PARA O SEU RACIOCÍNIO:
 3.  **Peça Esclarecimentos:** Se uma pergunta for ambígua, peça ao usuário para esclarecer.
 4.  **Código Simples e Focado:** Gere o código Python mais simples e direto possível para cada etapa.
 5.  **Verificação Inicial é Obrigatória:** Para a primeira pergunta, inspecione o dataframe com `df.info()` e `df.head()`.
-
-IMPORTANTE - REGISTRO DE CONCLUSÕES:
-6.  **Após cada análise significativa**, você DEVE gerar uma conclusão clara e objetiva sobre o que descobriu.
-7.  **Formato da conclusão**: Ao final da sua resposta, se você fez uma análise importante, inclua uma linha começando com "CONCLUSÃO:" seguida do insight principal.
-8.  **Exemplos de conclusões**:
-    - "CONCLUSÃO: A idade média dos clientes é 34 anos, com maior concentração entre 25-40 anos."
-    - "CONCLUSÃO: Há uma correlação positiva forte (0.85) entre gastos e frequência de compras."
-    - "CONCLUSÃO: O dataset possui 15% de valores ausentes na coluna 'renda', requerendo tratamento."
 
 Agora, comece a interagir com o usuário sobre o dataframe fornecido.
 """
@@ -38,34 +30,68 @@ class MemoriaAnalise:
         self.conclusoes = []
         self.metadados_dataset = {}
     
-    def adicionar_conclusao(self, pergunta, resposta, conclusao):
+    def adicionar_conclusao(self, pergunta, resposta, conclusao_gerada):
         """Adiciona uma nova conclusão à memória."""
         entrada = {
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "pergunta": pergunta,
-            "resposta": resposta,
-            "conclusao": conclusao
+            "resposta_completa": resposta[:500],  # Primeiros 500 chars
+            "conclusao": conclusao_gerada
         }
         self.conclusoes.append(entrada)
     
-    def extrair_conclusao(self, texto_resposta):
-        """Extrai a conclusão marcada no texto da resposta."""
-        linhas = texto_resposta.split('\n')
-        for linha in linhas:
-            if linha.strip().startswith("CONCLUSÃO:"):
-                return linha.replace("CONCLUSÃO:", "").strip()
-        return None
+    def gerar_conclusao_automatica(self, pergunta, resposta):
+        """Gera uma conclusão automática baseada na pergunta e resposta."""
+        # Extrai informações numéricas e palavras-chave
+        palavras_chave = {
+            'média': 'calculou média',
+            'soma': 'calculou soma',
+            'total': 'calculou total',
+            'distribuição': 'analisou distribuição',
+            'correlação': 'analisou correlação',
+            'valores ausentes': 'identificou valores ausentes',
+            'missing': 'identificou valores ausentes',
+            'mínimo': 'identificou valor mínimo',
+            'máximo': 'identificou valor máximo',
+            'desvio': 'calculou desvio padrão',
+            'mediana': 'calculou mediana',
+            'contagem': 'fez contagem',
+            'agrupamento': 'realizou agrupamento',
+            'filtro': 'aplicou filtro',
+        }
+        
+        conclusao_parts = []
+        resposta_lower = resposta.lower()
+        
+        # Detecta tipo de análise
+        for palavra, descricao in palavras_chave.items():
+            if palavra in resposta_lower or palavra in pergunta.lower():
+                conclusao_parts.append(descricao)
+                break
+        
+        # Extrai números relevantes (valores entre 0-9 com decimais)
+        import re
+        numeros = re.findall(r'\b\d+\.?\d*\b', resposta)
+        if numeros:
+            conclusao_parts.append(f"valores encontrados: {', '.join(numeros[:3])}")
+        
+        if conclusao_parts:
+            return f"Análise: {pergunta[:50]}... - {' | '.join(conclusao_parts)}"
+        else:
+            return f"Análise realizada sobre: {pergunta[:80]}..."
     
     def obter_resumo_conclusoes(self):
         """Retorna um resumo de todas as conclusões."""
         if not self.conclusoes:
-            return "Nenhuma conclusão registrada ainda."
+            return "🤔 **Nenhuma análise registrada ainda.**\n\nFaça perguntas sobre seus dados e eu vou memorizar as descobertas!"
         
-        resumo = "📊 **RESUMO DAS CONCLUSÕES E INSIGHTS:**\n\n"
+        resumo = f"📊 **MEMÓRIA DO AGENTE - {len(self.conclusoes)} Análises Realizadas**\n\n"
+        
         for i, entrada in enumerate(self.conclusoes, 1):
-            resumo += f"{i}. **{entrada['pergunta']}**\n"
+            resumo += f"**{i}. {entrada['pergunta'][:60]}{'...' if len(entrada['pergunta']) > 60 else ''}**\n"
             resumo += f"   💡 {entrada['conclusao']}\n"
             resumo += f"   🕐 {entrada['timestamp']}\n\n"
+        
         return resumo
     
     def obter_contexto_para_agente(self):
@@ -73,10 +99,11 @@ class MemoriaAnalise:
         if not self.conclusoes:
             return ""
         
-        contexto = "\n--- CONCLUSÕES ANTERIORES (para referência) ---\n"
-        for entrada in self.conclusoes[-5:]:  # Últimas 5 conclusões
-            contexto += f"• {entrada['conclusao']}\n"
-        contexto += "--- FIM DAS CONCLUSÕES ---\n"
+        contexto = "\n\n--- ANÁLISES ANTERIORES NESTA SESSÃO ---\n"
+        for entrada in self.conclusoes[-3:]:  # Últimas 3 análises
+            contexto += f"• Pergunta: {entrada['pergunta']}\n"
+            contexto += f"  Conclusão: {entrada['conclusao']}\n"
+        contexto += "--- FIM DO HISTÓRICO ---\n\n"
         return contexto
     
     def serializar(self):
@@ -199,19 +226,36 @@ with st.sidebar:
             st.query_params.clear()
             st.rerun()
     
-    # --- NOVA SEÇÃO: Visualização da Memória ---
-    if st.session_state.memoria.conclusoes:
-        st.divider()
-        st.header("🧠 Memória do Agente")
-        
-        with st.expander(f"📋 Ver Conclusões ({len(st.session_state.memoria.conclusoes)})"):
+    # --- SEÇÃO: Visualização da Memória ---
+    st.divider()
+    st.header("🧠 Memória do Agente")
+    
+    num_conclusoes = len(st.session_state.memoria.conclusoes)
+    st.metric("Análises Memoradas", num_conclusoes)
+    
+    if num_conclusoes > 0:
+        with st.expander(f"📋 Ver Todas as Análises ({num_conclusoes})", expanded=False):
             st.markdown(st.session_state.memoria.obter_resumo_conclusoes())
         
-        if st.button("🗑️ Limpar Memória"):
-            st.session_state.memoria = MemoriaAnalise()
-            st.query_params["memoria"] = ""
-            st.success("Memória limpa!")
-            st.rerun()
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("🗑️ Limpar Memória", use_container_width=True):
+                st.session_state.memoria = MemoriaAnalise()
+                st.query_params["memoria"] = ""
+                st.success("Memória limpa!")
+                st.rerun()
+        
+        with col2:
+            if st.button("📥 Exportar Memória", use_container_width=True):
+                dados_export = json.dumps(st.session_state.memoria.conclusoes, indent=2, ensure_ascii=False)
+                st.download_button(
+                    label="💾 Download JSON",
+                    data=dados_export,
+                    file_name=f"memoria_analise_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+                    mime="application/json"
+                )
+    else:
+        st.info("Faça análises para começar a construir a memória!")
 
 # --- Lógica Principal ---
 if st.session_state.google_api_key and st.session_state.df is not None:
@@ -220,10 +264,9 @@ if st.session_state.google_api_key and st.session_state.df is not None:
         st.info("Inicializando o agente de IA com sistema de memória...")
         try:
             llm = ChatGoogleGenerativeAI(
-                model="gemini-2.5-flash",
+                model="gemini-2.0-flash-exp",
                 temperature=0,
-                convert_system_message_to_human=True,
-                api_version="v1"
+                convert_system_message_to_human=True
             )
             st.session_state.agent = create_pandas_dataframe_agent(
                 llm=llm,
@@ -235,17 +278,21 @@ if st.session_state.google_api_key and st.session_state.df is not None:
                 agent_executor_kwargs={"handle_parsing_errors": True},
                 allow_dangerous_code=True
             )
-            st.success("Agente pronto para conversar!")
+            st.success("✅ Agente pronto para conversar!")
         except Exception as e:
             st.error(f"Erro ao criar o agente: {e}")
             st.stop()
 
-    st.header("Converse com seus Dados")
+    st.header("💬 Converse com seus Dados")
 
     if not st.session_state.messages:
+        mensagem_inicial = "Olá! Sou seu assistente de análise de dados com **memória persistente**. \n\n"
+        mensagem_inicial += "🧠 Vou memorizar todas as análises que fizermos juntos!\n\n"
+        mensagem_inicial += "Você pode me perguntar a qualquer momento: *'Quais conclusões tiramos até agora?'*"
+        
         st.session_state.messages.append({
             "role": "assistant", 
-            "content": "Olá! Sou seu assistente de análise de dados com memória persistente. Posso lembrar de todas as conclusões que tiramos juntos! O que você gostaria de saber?",
+            "content": mensagem_inicial,
             "figure": None
         })
 
@@ -258,12 +305,13 @@ if st.session_state.google_api_key and st.session_state.df is not None:
     if prompt := st.chat_input("Faça sua pergunta sobre os dados..."):
         
         # Detecta se o usuário está perguntando sobre conclusões anteriores
-        palavras_chave_memoria = ["conclusões", "conclusoes", "insights", "descobrimos", "aprendemos", "resumo", "análises anteriores"]
+        palavras_chave_memoria = ["conclusões", "conclusoes", "insights", "descobrimos", "aprendemos", 
+                                   "resumo", "análises anteriores", "o que já fizemos", "memória", "memoria"]
         pergunta_sobre_memoria = any(palavra in prompt.lower() for palavra in palavras_chave_memoria)
         
         if pergunta_sobre_memoria and st.session_state.memoria.conclusoes:
             # Responde diretamente com o resumo da memória
-            st.session_state.messages.append({"role": "user", "content": prompt})
+            st.session_state.messages.append({"role": "user", "content": prompt, "figure": None})
             resposta_memoria = st.session_state.memoria.obter_resumo_conclusoes()
             st.session_state.messages.append({"role": "assistant", "content": resposta_memoria, "figure": None})
             
@@ -273,33 +321,34 @@ if st.session_state.google_api_key and st.session_state.df is not None:
         
         else:
             # Análise normal com o agente
-            st.session_state.messages.append({"role": "user", "content": prompt})
+            st.session_state.messages.append({"role": "user", "content": prompt, "figure": None})
             st.query_params["chat"] = serializar_chat(st.session_state.messages)
 
             with st.chat_message("user"):
                 st.markdown(prompt)
 
             with st.chat_message("assistant"):
-                with st.spinner("O agente está pensando..."):
+                with st.spinner("🤔 O agente está pensando..."):
                     try:
                         plt.close('all')
                         
                         # Adiciona contexto de conclusões anteriores
-                        prompt_com_contexto = st.session_state.memoria.obter_contexto_para_agente() + prompt
+                        contexto = st.session_state.memoria.obter_contexto_para_agente()
+                        prompt_com_contexto = contexto + prompt if contexto else prompt
                         
-                        chat_history = [{"role": m["role"], "content": m["content"]} for m in st.session_state.messages]
-                        response = st.session_state.agent.invoke({"input": prompt_com_contexto, "chat_history": chat_history})
+                        chat_history = [{"role": m["role"], "content": m["content"]} for m in st.session_state.messages[:-1]]
+                        response = st.session_state.agent.invoke({
+                            "input": prompt_com_contexto, 
+                            "chat_history": chat_history
+                        })
                         output_text = response["output"]
                         
-                        # Extrai e armazena conclusão
-                        conclusao = st.session_state.memoria.extrair_conclusao(output_text)
-                        if conclusao:
-                            st.session_state.memoria.adicionar_conclusao(prompt, output_text, conclusao)
-                            # Remove a linha "CONCLUSÃO:" da resposta exibida
-                            output_text = output_text.replace(f"CONCLUSÃO: {conclusao}", "").strip()
+                        # FORÇA a geração de conclusão automática
+                        conclusao_gerada = st.session_state.memoria.gerar_conclusao_automatica(prompt, output_text)
+                        st.session_state.memoria.adicionar_conclusao(prompt, output_text, conclusao_gerada)
                         
                         fig = plt.gcf()
-                        has_plot = any(ax.has_data() for ax in fig.get_axes()) if fig else False
+                        has_plot = any(ax.has_data() for ax in fig.get_axes()) if fig.get_axes() else False
 
                         if has_plot:
                             st.pyplot(fig)
@@ -309,12 +358,11 @@ if st.session_state.google_api_key and st.session_state.df is not None:
                             st.markdown(output_text)
                             st.session_state.messages.append({"role": "assistant", "content": output_text, "figure": None})
                         
-                        # Mostra notificação de nova conclusão
-                        if conclusao:
-                            st.info(f"💡 Nova conclusão registrada: {conclusao}")
+                        # Mostra toast de nova conclusão adicionada
+                        st.toast(f"💾 Análise memorizada: {conclusao_gerada[:50]}...", icon="🧠")
 
                     except Exception as e:
-                        error_message = f"Ocorreu um erro: {e}"
+                        error_message = f"❌ Ocorreu um erro: {e}"
                         st.error(error_message)
                         st.session_state.messages.append({"role": "assistant", "content": error_message, "figure": None})
             
@@ -323,4 +371,4 @@ if st.session_state.google_api_key and st.session_state.df is not None:
             st.query_params["memoria"] = st.session_state.memoria.serializar()
 
 else:
-    st.info("Por favor, configure a API Key e faça o upload de um arquivo CSV na barra lateral para começar.")
+    st.info("👈 Por favor, configure a API Key e faça o upload de um arquivo CSV na barra lateral para começar.")
