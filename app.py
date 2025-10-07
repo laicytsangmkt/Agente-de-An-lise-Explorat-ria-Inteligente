@@ -177,7 +177,8 @@ if st.session_state.google_api_key and st.session_state.df is not None:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
             if "figure_base64" in message and message["figure_base64"] is not None:
-                st.image(base64.b64decode(message["figure_base64"]), use_column_width=True)
+                st.image(base64.b64decode(message["figure_base64"]), use_container_width=True)
+
             elif "figure" in message and message["figure"] is not None:
                 st.pyplot(message["figure"])
 
