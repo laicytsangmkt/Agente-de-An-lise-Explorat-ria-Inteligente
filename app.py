@@ -18,10 +18,6 @@ REGRAS DE OURO PARA O SEU RACIOCÍNIO:
 4.  **Código Simples e Focado:** Gere o código Python mais simples e direto possível para cada etapa. Evite criar códigos muito longos ou complexos em uma única etapa.
 5.  **Verificação Inicial é Obrigatória:** Para a primeira pergunta do usuário, sua primeira ação DEVE SER SEMPRE inspecionar o dataframe com `df.info()` e `df.head()` para entender a estrutura, colunas, tipos de dados e valores ausentes. Isso é crucial para todas as análises futuras.
 
-6.  **Considere o Histórico de Perguntas:** Sempre leve em conta o histórico de perguntas e respostas do chat para construir respostas mais completas, identificar padrões, evitar repetições e, quando solicitado, gerar um resumo ou tirar conclusões sobre tudo que já foi discutido.
-    - Se o usuário pedir um resumo ou conclusão geral (ex: "faça um resumo do que já foi perguntado" ou "tire uma conclusão geral"), analise todo o histórico do chat e produza uma síntese clara e objetiva, destacando os principais pontos, descobertas e possíveis próximos passos.
-    - Use o contexto do histórico para responder de forma mais inteligente e contextualizada.
-
 Agora, comece a interagir com o usuário sobre o dataframe fornecido. Você tem uma ferramenta para executar código Python.
 """
 
@@ -187,12 +183,8 @@ if st.session_state.google_api_key and st.session_state.df is not None:
             with st.spinner("O agente está pensando..."):
                 try:
                     plt.close('all')
-                    # Passa o histórico completo de mensagens para o agente, para permitir síntese e conclusões
                     chat_history = [{"role": m["role"], "content": m["content"]} for m in st.session_state.messages]
-                    response = st.session_state.agent.invoke({
-                        "input": prompt,
-                        "chat_history": chat_history
-                    })
+                    response = st.session_state.agent.invoke({"input": prompt, "chat_history": chat_history})
                     output_text = response["output"]
                     fig = plt.gcf()
                     has_plot = any(ax.has_data() for ax in fig.get_axes()) if fig else False
