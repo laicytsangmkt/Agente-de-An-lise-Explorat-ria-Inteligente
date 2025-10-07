@@ -31,7 +31,7 @@ class MemoriaAnalise:
     
     def adicionar_conclusao(self, pergunta, resposta):
         """Adiciona uma nova conclusão à memória."""
-        # Gera conclusão automática
+        # Gera conclusão automática baseada na pergunta e resposta
         conclusao_gerada = self._gerar_conclusao_automatica(pergunta, resposta)
         
         entrada = {
@@ -40,6 +40,7 @@ class MemoriaAnalise:
             "conclusao": conclusao_gerada
         }
         self.conclusoes.append(entrada)
+        return conclusao_gerada
     
     def _gerar_conclusao_automatica(self, pergunta, resposta):
         """Gera uma conclusão automática baseada na pergunta e resposta."""
