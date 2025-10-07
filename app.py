@@ -138,14 +138,56 @@ st.title("🤖 Agente Autônomo para Análise de Dados em CSV")
 st.write("Esta aplicação utiliza um agente de IA para responder perguntas sobre arquivos CSV.")
 
 def carregar_e_processar_csv(arquivo_csv):
+    """Carrega CSV em chunks para melhor performance."""
     try:
-        df = pd.read_csv(arquivo_csv)
-        return df
-    except UnicodeDecodeError:
-        st.warning("Falha na decodificação UTF-8. Tentando com 'latin1'.")
+        # Tenta detectar o encoding e delimitador
         arquivo_csv.seek(0)
-        df = pd.read_csv(arquivo_csv, encoding='latin1')
+        sample = arquivo_csv.read(10000).decode('utf-8', errors='ignore')
+        arquivo_csv.seek(0)
+        
+        # Parâmetros otimizados para leitura rápida
+        chunk_size = 50000  # Lê 50k linhas por vez
+        chunks = []
+        
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        
+        try:
+            # Primeira tentativa: UTF-8
+            total_chunks = 0
+            for i, chunk in enumerate(pd.read_csv(arquivo_csv, chunksize=chunk_size, low_memory=False)):
+                chunks.append(chunk)
+                total_chunks = i + 1
+                progress_bar.progress(min(total_chunks * 0.1, 0.9))
+                status_text.text(f"Carregando... {total_chunks * chunk_size} linhas processadas")
+            
+            status_text.text("Concatenando dados...")
+            df = pd.concat(chunks, ignore_index=True)
+            
+        except UnicodeDecodeError:
+            # Segunda tentativa: latin1
+            st.warning("Falha na decodificação UTF-8. Tentando com 'latin1'...")
+            arquivo_csv.seek(0)
+            chunks = []
+            
+            for i, chunk in enumerate(pd.read_csv(arquivo_csv, encoding='latin1', chunksize=chunk_size, low_memory=False)):
+                chunks.append(chunk)
+                progress_bar.progress(min((i + 1) * 0.1, 0.9))
+                status_text.text(f"Carregando... {(i + 1) * chunk_size} linhas processadas")
+            
+            df = pd.concat(chunks, ignore_index=True)
+        
+        progress_bar.progress(1.0)
+        status_text.text(f"✅ Arquivo carregado: {len(df):,} linhas e {len(df.columns)} colunas")
+        
+        # Limpa os widgets de progresso após 2 segundos
+        import time
+        time.sleep(2)
+        progress_bar.empty()
+        status_text.empty()
+        
         return df
+        
     except Exception as e:
         st.error(f"Erro ao carregar o arquivo CSV: {e}")
         return None
