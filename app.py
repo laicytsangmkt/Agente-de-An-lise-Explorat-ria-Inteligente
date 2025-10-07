@@ -194,7 +194,14 @@ if st.session_state.google_api_key and st.session_state.df is not None:
             with st.spinner("O agente está pensando..."):
                 try:
                     plt.close('all')
-                    chat_history = [{"role": m["role"], "content": m["content"]} for m in st.session_state.messages if m["role"] != "assistant" or ("figure" not in m and "figure_base64" not in m)]
+                    chat_history = []
+                    for m in st.session_state.messages:
+                        msg_copy = {"role": m["role"], "content": m["content"]}
+                        # Remove figure e figure_base64 para o histórico do agente
+                        if "figure" in msg_copy: del msg_copy["figure"]
+                        if "figure_base64" in msg_copy: del msg_copy["figure_base64"]
+                        chat_history.append(msg_copy)
+
                     response = st.session_state.agent.invoke({"input": prompt, "chat_history": chat_history})
                     output_text = response["output"]
                     fig = plt.gcf()
