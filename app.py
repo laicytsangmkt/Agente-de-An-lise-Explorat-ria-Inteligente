@@ -264,9 +264,10 @@ if st.session_state.google_api_key and st.session_state.df is not None:
         st.info("Inicializando o agente de IA com sistema de memória...")
         try:
             llm = ChatGoogleGenerativeAI(
-                model="gemini-2.0-flash-exp",
+                model="gemini-2.5-flash",
                 temperature=0,
-                convert_system_message_to_human=True
+                convert_system_message_to_human=True,
+                api_version="v1"
             )
             st.session_state.agent = create_pandas_dataframe_agent(
                 llm=llm,
